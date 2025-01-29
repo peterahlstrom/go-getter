@@ -1,0 +1,5 @@
+{
+    "scriptPath": "./script.sh",
+    "urlPath": "data",
+    "logPath": "go-getter.log"
+}
