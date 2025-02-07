@@ -1,5 +1,13 @@
 {
-    "scriptPath": "./script.sh",
-    "urlPath": "data",
-    "logPath": "go-getter.log"
+  "logPath": "go-getter.log",
+  "endpoints": [
+    {
+      "urlPath": "data1",
+      "scriptPath": "./script1.sh"
+    },
+    {
+      "urlPath": "data2",
+      "scriptPath": "./script2.sh"
+    }
+  ]
 }
