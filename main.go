@@ -10,11 +10,14 @@ import (
 	"time"
 )
 
-type Config struct {
+type Endpoint struct {
 	ScriptPath 	string `json:"scriptPath"`
 	UrlPath 	string `json:"urlPath"`
-	Port 		string `json:"port"`
+}
+
+type Config struct {
 	LogPath 	string `json:"logPath"`
+	Endpoints	[]Endpoint `json:"endpoints"`
 }
 var configPath = "config.json"
 
@@ -30,7 +33,10 @@ func main() {
 	}
 
 	router := http.NewServeMux()
-	router.HandleFunc(fmt.Sprintf("GET /%s", cfg.UrlPath), GetRequestHandler(cfg))
+	
+	for _, e := range cfg.Endpoints {
+		router.HandleFunc(fmt.Sprintf("GET /%s", e.UrlPath), GetRequestHandler(e.ScriptPath, cfg.LogPath))
+	}
 
 	addr := fmt.Sprintf(":%s", port)
 	server := http.Server{
@@ -42,9 +48,9 @@ func main() {
 }
 
 
-func GetRequestHandler (cfg *Config) http.HandlerFunc {
+func GetRequestHandler (scriptPath string, logPath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		logFile, err := os.OpenFile(cfg.LogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			log.Fatalf("failed to open log file: %v", err)
 		}
@@ -53,7 +59,7 @@ func GetRequestHandler (cfg *Config) http.HandlerFunc {
 
 		start := time.Now()
 		
-		result, err := RunScript(cfg.ScriptPath)
+		result, err := RunScript(scriptPath)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("could not get data: %v", err), http.StatusInternalServerError)
 			log.Printf("ERROR: %s %s from %s - 500 Internal Server Error (%v)", 
