@@ -16,9 +16,22 @@ type Endpoint struct {
 }
 
 type Config struct {
-	LogPath 	string `json:"logPath"`
-	Endpoints	[]Endpoint `json:"endpoints"`
+	LogPath					string `json:"logPath"`
+	ConcurrentScriptsExec 	int `json:"concurrentScriptsExec"`
+	Endpoints				[]Endpoint `json:"endpoints"`
 }
+
+type ScriptError struct {
+	Message	string
+	HttpStatus	int
+}
+
+func (e *ScriptError) Error() string {
+	return e.Message
+}
+
+var scriptLimiter chan struct{}
+
 var configPath = "config.json"
 
 func main() {
@@ -32,10 +45,19 @@ func main() {
 		log.Fatalf("ERROR: Config file %s: %v\n", configPath, err)
 	}
 
+	logFile, err := os.OpenFile(cfg.LogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("failed to open log file: %v", err)
+	}
+	defer logFile.Close()
+	log.SetOutput(logFile)
+
+	scriptLimiter = make(chan struct{}, cfg.ConcurrentScriptsExec)
+
 	router := http.NewServeMux()
 	
 	for _, e := range cfg.Endpoints {
-		router.HandleFunc(fmt.Sprintf("GET /%s", e.UrlPath), GetRequestHandler(e.ScriptPath, cfg.LogPath))
+		router.HandleFunc(fmt.Sprintf("GET /%s", e.UrlPath), GetRequestHandler(e.ScriptPath))
 	}
 
 	addr := fmt.Sprintf(":%s", port)
@@ -48,29 +70,23 @@ func main() {
 }
 
 
-func GetRequestHandler (scriptPath string, logPath string) http.HandlerFunc {
+func GetRequestHandler (scriptPath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Fatalf("failed to open log file: %v", err)
-		}
-		defer logFile.Close()
-		log.SetOutput(logFile)
-
 		start := time.Now()
 		
 		result, err := RunScript(scriptPath)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("could not get data: %v", err), http.StatusInternalServerError)
-			log.Printf("ERROR: %s %s from %s - 500 Internal Server Error (%v)", 
-				r.Method, r.URL, r.RemoteAddr, time.Since(start))
+			e := err.(*ScriptError)
+			http.Error(w, e.Message, e.HttpStatus)
+			log.Printf("ERROR: %s %s from %s - %d %s (%v)", 
+				r.Method, r.URL, r.RemoteAddr, e.HttpStatus, http.StatusText(e.HttpStatus), time.Since(start))
 			return
 		}
 		
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		
-		w.Write(result)
+		w.Write(*result)
 		log.Printf("INFO:  %s %s from %s - 200 OK (%v)", r.Method, r.URL, r.RemoteAddr, time.Since(start))
 	}
 }
@@ -92,13 +108,20 @@ func GetConfig (configPath string) (*Config, error) {
 } 
 
 
-func RunScript (path string) ([]byte, error) {
-	cmd := exec.Command(path)
-
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("the script resulted in an error: %v", err)
+func RunScript (path string) (*[]byte, error) {
+	select {
+	case scriptLimiter <- struct{}{}:
+		defer func() { <- scriptLimiter	}()
+	case <- time.After(time.Second * 5):
+		return nil, &ScriptError{Message: "Script server busy, try again later.",
+		HttpStatus: http.StatusGatewayTimeout}
 	}
-	
-	return output, nil
+
+	cmd := exec.Command(path)
+		output, err := cmd.Output()
+		if err != nil {
+			return nil, &ScriptError{Message: fmt.Sprintf("The script resulted in an error: %v", err),
+				HttpStatus: http.StatusInternalServerError,}
+		}
+		return &output, nil
 }
