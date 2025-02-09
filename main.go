@@ -6,8 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
-	"time"
+
+	script "github.com/peterahlstrom/go-getter/handlers"
 )
 
 type Endpoint struct {
@@ -17,20 +17,9 @@ type Endpoint struct {
 
 type Config struct {
 	LogPath					string `json:"logPath"`
-	ConcurrentScriptsExec 	int `json:"concurrentScriptsExec"`
+	ConcurrentScriptsLimit 	int `json:"concurrentScriptsLimit"`
 	Endpoints				[]Endpoint `json:"endpoints"`
 }
-
-type ScriptError struct {
-	Message	string
-	HttpStatus	int
-}
-
-func (e *ScriptError) Error() string {
-	return e.Message
-}
-
-var scriptLimiter chan struct{}
 
 var configPath = "config.json"
 
@@ -52,12 +41,12 @@ func main() {
 	defer logFile.Close()
 	log.SetOutput(logFile)
 
-	scriptLimiter = make(chan struct{}, cfg.ConcurrentScriptsExec)
+	script.InitScriptLimiter(cfg.ConcurrentScriptsLimit)
 
 	router := http.NewServeMux()
 	
 	for _, e := range cfg.Endpoints {
-		router.HandleFunc(fmt.Sprintf("GET /%s", e.UrlPath), GetRequestHandler(e.ScriptPath))
+		router.HandleFunc(fmt.Sprintf("GET /%s", e.UrlPath), script.GetRequestHandler(e.ScriptPath))
 	}
 
 	addr := fmt.Sprintf(":%s", port)
@@ -67,28 +56,6 @@ func main() {
 	}
 	log.Printf("INFO: Server starting. Listening to port %s\n", port)
 	server.ListenAndServe()
-}
-
-
-func GetRequestHandler (scriptPath string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		
-		result, err := RunScript(scriptPath)
-		if err != nil {
-			e := err.(*ScriptError)
-			http.Error(w, e.Message, e.HttpStatus)
-			log.Printf("ERROR: %s %s from %s - %d %s (%v)", 
-				r.Method, r.URL, r.RemoteAddr, e.HttpStatus, http.StatusText(e.HttpStatus), time.Since(start))
-			return
-		}
-		
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-		
-		w.Write(*result)
-		log.Printf("INFO:  %s %s from %s - 200 OK (%v)", r.Method, r.URL, r.RemoteAddr, time.Since(start))
-	}
 }
 
 
@@ -106,22 +73,3 @@ func GetConfig (configPath string) (*Config, error) {
 	
 	return &cfg, nil
 } 
-
-
-func RunScript (path string) (*[]byte, error) {
-	select {
-	case scriptLimiter <- struct{}{}:
-		defer func() { <- scriptLimiter	}()
-	case <- time.After(time.Second * 5):
-		return nil, &ScriptError{Message: "Script server busy, try again later.",
-		HttpStatus: http.StatusGatewayTimeout}
-	}
-
-	cmd := exec.Command(path)
-		output, err := cmd.Output()
-		if err != nil {
-			return nil, &ScriptError{Message: fmt.Sprintf("The script resulted in an error: %v", err),
-				HttpStatus: http.StatusInternalServerError,}
-		}
-		return &output, nil
-}

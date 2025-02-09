@@ -1,6 +1,6 @@
 {
   "logPath": "go-getter.log",
-  "concurrentScriptsExec": 3,
+  "concurrentScriptsLimit": 3,
   "endpoints": [
     {
       "urlPath": "data1",
