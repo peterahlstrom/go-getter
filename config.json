@@ -1,14 +1,18 @@
 {
   "logPath": "go-getter.log",
   "concurrentScriptsLimit": 3,
-  "endpoints": [
-    {
-      "urlPath": "data1",
-      "scriptPath": "./script1.sh"
+  "endpoints": {
+    "/data1": {
+      "scriptPath": "./script1.sh",
+      "requireAuth": true,
+      "apiKeys": {
+        "abc123": "dev",
+        "def456": "prod"
+      }
     },
-    {
-      "urlPath": "data2",
-      "scriptPath": "./script2.sh"
+    "/data2": {
+      "scriptPath": "./script2.sh",
+      "requireAuth": false
     }
-  ]
+  }
 }
