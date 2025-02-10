@@ -1,25 +1,16 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 
-	script "github.com/peterahlstrom/go-getter/handlers"
+	"github.com/peterahlstrom/go-getter/auth"
+	"github.com/peterahlstrom/go-getter/config"
+	"github.com/peterahlstrom/go-getter/handlers/script"
 )
 
-type Endpoint struct {
-	ScriptPath 	string `json:"scriptPath"`
-	UrlPath 	string `json:"urlPath"`
-}
-
-type Config struct {
-	LogPath					string `json:"logPath"`
-	ConcurrentScriptsLimit 	int `json:"concurrentScriptsLimit"`
-	Endpoints				[]Endpoint `json:"endpoints"`
-}
 
 var configPath = "config.json"
 
@@ -29,7 +20,7 @@ func main() {
 	}
 	port := os.Args[1]
 
-	cfg, err := GetConfig(configPath)
+	cfg, err := config.GetConfig(configPath)
 	if err != nil {
 		log.Fatalf("ERROR: Config file %s: %v\n", configPath, err)
 	}
@@ -45,31 +36,17 @@ func main() {
 
 	router := http.NewServeMux()
 	
-	for _, e := range cfg.Endpoints {
-		router.HandleFunc(fmt.Sprintf("GET /%s", e.UrlPath), script.GetRequestHandler(e.ScriptPath))
+	for k, e := range cfg.Endpoints {
+		router.HandleFunc(fmt.Sprintf("GET %s", k), script.GetRequestHandler(e.ScriptPath))
 	}
+
+	secureHandler := auth.ApiKeyMiddleWare(cfg.Endpoints)(router)
 
 	addr := fmt.Sprintf(":%s", port)
 	server := http.Server{
 		Addr: addr,
-		Handler: router,
+		Handler: secureHandler,
 	}
-	log.Printf("INFO: Server starting. Listening to port %s\n", port)
+	fmt.Printf("INFO: Server starting. Listening to port %s\n", port)
 	server.ListenAndServe()
 }
-
-
-func GetConfig (configPath string) (*Config, error) {
-	var cfg Config
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("could not read config file: %v", err)
-	}
-
-	err = json.Unmarshal(data, &cfg)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse config-file: %v", err)
-	}
-	
-	return &cfg, nil
-} 
