@@ -41,3 +41,10 @@ $ ./main <port>
   }
 }
 ```
+
+### Query example
+
+```bash
+$ curl -H "Authorization: ApiKey abc123" localhost:7980/data1
+```
+
