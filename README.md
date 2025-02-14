@@ -28,6 +28,7 @@ $ ./main <port>
   "endpoints": {
     "/data1": {
       "scriptPath": "./script1.sh",
+      "contentType": "application/json",
       "requireAuth": true,
       "apiKeys": {
         "abc123": "dev",
@@ -36,6 +37,7 @@ $ ./main <port>
     },
     "/data2": {
       "scriptPath": "./script2.sh",
+      "contentType": "text/plain",
       "requireAuth": false
     }
   }

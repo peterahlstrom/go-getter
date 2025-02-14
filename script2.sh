@@ -1,2 +1,2 @@
 #!/bin/bash -e
-echo '{"data": "data from script2"}'
+echo "data from script2"
