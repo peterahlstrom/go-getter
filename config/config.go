@@ -7,7 +7,6 @@ import (
 )
 
 type Endpoint struct {
-	UrlPath 		string `json:"urlPath"`
 	ScriptPath 		string `json:"scriptPath"`
 	RequireAuth		bool `json:"requireAuth"`
 	ValidApiKeys	map[string]string `json:"apiKeys"`

@@ -1,12 +1,20 @@
 package auth
 
 import (
-	"log"
 	"net/http"
 	"strings"
 
 	"github.com/peterahlstrom/go-getter/config"
 )
+
+type ApiKeyError struct {
+	Message string
+	HttpStatus int
+}
+
+func (e *ApiKeyError) Error() string {
+	return e.Message
+}
 
 func ApiKeyMiddleWare(endpoints map[string]config.Endpoint) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler{
@@ -18,7 +26,6 @@ func ApiKeyMiddleWare(endpoints map[string]config.Endpoint) func(http.Handler) h
 			}
 		
 			if !e.RequireAuth {
-				log.Println("No authentication required")
 				next.ServeHTTP(w, r)
 				return
 			}
