@@ -23,7 +23,7 @@ func InitScriptLimiter(max int) {
 }
 
 
-func GetRequestHandler (scriptPath string) http.HandlerFunc {
+func GetRequestHandler (scriptPath string, contentType string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		
@@ -36,7 +36,7 @@ func GetRequestHandler (scriptPath string) http.HandlerFunc {
 			return
 		}
 		
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", contentType)
 		w.Header().Set("Cache-Control", "no-store")
 		
 		w.Write(*result)
