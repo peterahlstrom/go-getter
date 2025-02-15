@@ -37,7 +37,7 @@ func main() {
 	router := http.NewServeMux()
 	
 	for k, e := range cfg.Endpoints {
-		router.HandleFunc(fmt.Sprintf("GET %s", k), script.GetRequestHandler(e.ScriptPath))
+		router.HandleFunc(fmt.Sprintf("GET %s", k), script.GetRequestHandler(e.ScriptPath, e.ContentType))
 	}
 
 	secureHandler := auth.ApiKeyMiddleWare(cfg.Endpoints)(router)
