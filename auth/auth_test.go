@@ -2,56 +2,59 @@ package auth
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/peterahlstrom/go-getter/config"
 )
 
-var mockHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte{"Success"})
-})
-
-// type Endpoint struct {
-// 	UrlPath 		string `json:"urlPath"`
-// 	ScriptPath 		string `json:"scriptPath"`
-// 	RequireAuth		bool `json:"requireAuth"`
-// 	ValidApiKeys	map[string]string `json:"apiKeys"`
-// }
-
-var tests = []map[string]config.Endpoint{
-
-
-	{
-		"no-auth": {
-			ScriptPath: "",
+func TestApiKeyMiddleware(t *testing.T) {
+	endpoints := map[string]config.Endpoint{
+		"/public": {
 			RequireAuth: false,
-			ValidApiKeys: nil,
 		},
-		"validkey": {
-			ScriptPath: "",
+		"/protected": {
 			RequireAuth: true,
-			ValidApiKeys: map[string]string{"abc123": "test"},
+			ValidApiKeys: map[string]string{
+				"abc123": "dev",
+				"def456": "prod",
+			},
 		},
-	},
-}
+	}
 
-func TestValidateApiKey(t *testing.T) {
+	mw := ApiKeyMiddleWare(endpoints)
 
 	tests := []struct {
-		name 	string
-		apiKey	string
-		endpoint map[string]config.Endpoint
-		expectedStatus	int
+		name       string
+		url        string
+		authHeader string
+		wantStatus int
 	}{
-		{"Valid API Key", "abc123", map[string]config.Endpoint{"endpoint": {config.Endpoint{ScriptPath: "", RequireAuth: true, ValidApiKeys: map[string]string{"abc123": "test"}}}}, expectedStatus: 200},
+		{"invalid endpoint", "/nope", "", http.StatusNotFound},
+		{"no auth", "/public", "", http.StatusOK},
+		{"missing key", "/protected", "", http.StatusUnauthorized},
+		{"invalid key format", "/protected", "abc123", http.StatusUnauthorized},
+		{"invalid key", "/protected", "ApiKey nope", http.StatusUnauthorized},
+		{"valid key", "/protected", "ApiKey abc123", http.StatusOK},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := ApiKeyMiddleWare(tt.endpoint, mockHandler)
+			req := httptest.NewRequest(http.MethodGet, tt.url, nil)
+			if tt.authHeader != "" {
+				req.Header.Set("Authorization", tt.authHeader)
+			}
+			rr := httptest.NewRecorder()
+
+			handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != tt.wantStatus {
+				t.Errorf("got status %d, want %d", rr.Code, tt.wantStatus)
+			}
 		})
 	}
-
-
 }
